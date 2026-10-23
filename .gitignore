@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+gta_channel.json
+gta_channel.json.*.tmp
+*.log
+coverage/
+.DS_Store
+Thumbs.db
