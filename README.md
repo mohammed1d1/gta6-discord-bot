@@ -1,5 +1,9 @@
 # GTA 6 Discord Countdown | العد التنازلي للعبة GTA 6
 
+> **AI disclosure:** This repository was created with AI assistance using **OpenAI Codex — GPT-6.1**.
+>
+> **توضيح استخدام الذكاء الاصطناعي:** أُنشئ هذا المستودع بمساعدة الذكاء الاصطناعي باستخدام **OpenAI Codex — GPT-6.1**.
+
 A Node.js / discord.js v14 bot that creates a locked voice channel and updates its name every five minutes. Includes persistent storage, administrator-only setup, Arabic replies, and a configurable time zone (default: `UTC`).
 
 بوت باستخدام Node.js وdiscord.js v14 ينشئ قناة صوتية مغلقة للاتصال الافتراضي، ويحدث اسمها كل خمس دقائق. يحفظ القناة بين مرات التشغيل، ويتيح الإعداد للمسؤولين فقط، مع ردود عربية وتوقيت قابل للتغيير (الافتراضي UTC).
