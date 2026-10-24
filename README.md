@@ -1,8 +1,8 @@
 # GTA 6 Discord Countdown | العد التنازلي للعبة GTA 6
 
-A Node.js / discord.js v14 bot that creates a locked voice channel and updates its name every five minutes. Includes persistent storage, administrator-only setup, Arabic replies, and logs timestamped in `UTC`.
+A Node.js / discord.js v14 bot that creates a locked voice channel and updates its name every five minutes. Includes persistent storage, administrator-only setup, Arabic replies, and a configurable time zone (default: `UTC`).
 
-بوت باستخدام Node.js وdiscord.js v14 ينشئ قناة صوتية مغلقة للاتصال الافتراضي، ويحدث اسمها كل خمس دقائق. يحفظ القناة بين مرات التشغيل، ويتيح الإعداد للمسؤولين فقط، مع ردود عربية وسجل بالتوقيت العالمي UTC.
+بوت باستخدام Node.js وdiscord.js v14 ينشئ قناة صوتية مغلقة للاتصال الافتراضي، ويحدث اسمها كل خمس دقائق. يحفظ القناة بين مرات التشغيل، ويتيح الإعداد للمسؤولين فقط، مع ردود عربية وتوقيت قابل للتغيير (الافتراضي UTC).
 
 ## English
 
@@ -39,9 +39,12 @@ Edit `.env` locally:
 
 ```dotenv
 DISCORD_TOKEN=your_bot_token_here
+TIMEZONE=UTC
 ```
 
 Replace the placeholder with the token from the Developer Portal. A hosting provider can inject `DISCORD_TOKEN` directly instead. Environment variables take precedence over `.env`. Never paste a real token into source code, commits, screenshots, or support messages.
+
+To change the time zone, edit `TIMEZONE` in `.env`, for example `TIMEZONE=Europe/London` or `TIMEZONE=America/New_York`, then restart the bot. Use a valid IANA time zone name; daylight saving changes are handled automatically. Missing or blank values use `UTC`; invalid names stop startup with `INVALID_TIMEZONE`. This changes log timestamps and the release time displayed in the setup reply. The countdown duration and fixed release instant stay the same. Hosting environment variables override `.env`, so update the hosting setting too if one exists.
 
 ```sh
 npm run check
@@ -61,7 +64,7 @@ As a server administrator, run `/setup_gta`. The bot registers this global comma
 - New channel creation is rolled back if saving fails. If rollback also fails, the log identifies the orphaned channel for manual deletion. A host crash between Discord creation and local persistence can also leave an orphan; inspect channels before repeating setup after a crash.
 - `@everyone` can view the channel but cannot connect. The bot has View Channel, Connect, and Manage Channels. Administrators bypass channel denies; explicit role/member overwrites added later can also permit access. This is a display channel, not a universal administrator lockout.
 - Creation requests `position: 0` without a parent category. Discord's client grouping and sorting rules determine its exact visual placement relative to text channels and categories.
-- Keep the machine clock synchronized. Logs always use `UTC`, regardless of the host timezone. `Ctrl+C` / `SIGTERM` stops scheduling and allows pending work up to 15 seconds to finish.
+- Keep the machine clock synchronized. Logs use `TIMEZONE` (default `UTC`), regardless of the host timezone. `Ctrl+C` / `SIGTERM` stops scheduling and allows pending work up to 15 seconds to finish.
 - Use your host's process supervisor to restart on failure. The bot requires a long-running process and an outbound connection to Discord. The local JSON design is for a single process, not a horizontally scaled or sharded deployment.
 
 ### Publish safely to a new GitHub repository
@@ -129,9 +132,12 @@ Copy-Item .env.example .env
 
 ```dotenv
 DISCORD_TOKEN=your_bot_token_here
+TIMEZONE=UTC
 ```
 
 يمكنك بدلاً من ذلك تعيين `DISCORD_TOKEN` في إعدادات الاستضافة. متغير البيئة له الأولوية على ملف `.env`. لا تضع التوكن داخل الكود أو ترفعه إلى GitHub.
+
+لتغيير التوقيت، عدّل `TIMEZONE` في `.env`، مثلاً `TIMEZONE=Europe/London` أو `TIMEZONE=America/New_York`، ثم أعد تشغيل البوت. استخدم اسم منطقة زمنية صالحاً بصيغة IANA؛ يُطبّق التوقيت الصيفي تلقائياً. القيمة الفارغة أو غير المحددة تستخدم `UTC`، والاسم غير الصحيح يوقف بدء التشغيل بالرمز `INVALID_TIMEZONE`. يتغير توقيت السجل وموعد الإطلاق المعروض في رد الإعداد، بينما تبقى مدة العد التنازلي ولحظة انتهائه نفسها. إذا عيّنت المتغير في الاستضافة، عدّله هناك أيضاً لأنه يتقدم على `.env`.
 
 ```sh
 npm run check
@@ -151,7 +157,7 @@ npm start
 - إذا فشل الحفظ بعد إنشاء قناة، يحاول البوت حذف القناة الجديدة. إذا فشل الحذف، يطبع معرّفها لتنظيفها يدوياً. انقطاع الجهاز بين الإنشاء والحفظ قد يترك قناة غير مسجلة أيضاً؛ افحص السيرفر قبل إعادة الإعداد بعد الانقطاع.
 - يستطيع `@everyone` رؤية القناة لكن الاتصال ممنوع افتراضياً. للبوت صلاحيات العرض والاتصال وإدارة القناة. يتجاوز المسؤولون منع الاتصال، وقد تسمح أذونات إضافية تُضاف لاحقاً لبعض الأدوار أو الأعضاء بالاتصال.
 - يطلب البوت إنشاء القناة في الموضع `0` دون تصنيف، لكن ترتيبها المرئي النهائي يخضع لقواعد عرض القنوات والتصنيفات في Discord.
-- يستخدم السجل توقيت `UTC` دائماً. حافظ على دقة ساعة الجهاز. يوقف `Ctrl+C` أو `SIGTERM` الجدولة ويسمح بإنهاء العمل الجاري خلال 15 ثانية. استخدم مدير عمليات في الاستضافة لإعادة التشغيل عند الفشل، مع تخزين دائم واتصال مستمر بالإنترنت.
+- يستخدم السجل قيمة `TIMEZONE` (الافتراضي `UTC`). حافظ على دقة ساعة الجهاز. يوقف `Ctrl+C` أو `SIGTERM` الجدولة ويسمح بإنهاء العمل الجاري خلال 15 ثانية. استخدم مدير عمليات في الاستضافة لإعادة التشغيل عند الفشل، مع تخزين دائم واتصال مستمر بالإنترنت.
 
 ### رفع المشروع بأمان إلى GitHub
 

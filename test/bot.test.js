@@ -8,11 +8,21 @@ const path = require('node:path');
 const { ChannelType, PermissionFlagsBits, Routes, InteractionContextType,
   ApplicationIntegrationType } = require('discord.js');
 const { countdownName, validateMapping, ChannelStore, createBot,
-  RELEASE_AT, UPDATE_INTERVAL_MS } = require('../index');
+  RELEASE_AT, UPDATE_INTERVAL_MS, createTimeFormatter } = require('../index');
 
 const GUILD = '111111111111111111';
 const CHANNEL = '222222222222222222';
 const BOT = '333333333333333333';
+
+test('time zone settings default to UTC, convert dates, and reject invalid zones', () => {
+  assert.equal(createTimeFormatter().resolvedOptions().timeZone, 'UTC');
+  assert.equal(createTimeFormatter('  ').resolvedOptions().timeZone, 'UTC');
+  const instant = new Date('2026-01-01T12:00:00Z');
+  assert.equal(createTimeFormatter(' UTC ').format(instant), '01/01/2026, 12:00:00');
+  assert.equal(createTimeFormatter('America/New_York').format(instant), '01/01/2026, 07:00:00');
+  assert.equal(createTimeFormatter('America/New_York').format(new Date('2026-07-01T12:00:00Z')), '01/07/2026, 08:00:00');
+  assert.throws(() => createTimeFormatter('Invalid/Zone'), { code: 'INVALID_TIMEZONE' });
+});
 
 function fixture(initial = { [GUILD]: CHANNEL }) {
   let mapping = { ...initial };

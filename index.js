@@ -12,16 +12,27 @@ const {
 const RELEASE_AT = Date.parse('2026-11-18T22:00:00Z');
 const UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 const STORE_PATH = path.join(__dirname, 'gta_channel.json');
-const timestamp = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
-  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-});
+function createTimeFormatter(timeZone = 'UTC') {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: timeZone.trim() || 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    });
+  } catch {
+    const error = new Error('Invalid TIMEZONE; use UTC or a valid IANA time zone');
+    error.code = 'INVALID_TIMEZONE';
+    throw error;
+  }
+}
+
+let timestamp = createTimeFormatter();
 
 function log(message, error) {
   // Never dump Discord request objects, headers, environment variables or tokens.
   const code = error && /^[A-Za-z0-9_-]{1,40}$/.test(String(error.code))
     ? ` [code=${error.code}]` : '';
-  const line = `[${timestamp.format(new Date())} UTC] ${message}${code}`;
+  const line = `[${timestamp.format(new Date())} ${timestamp.resolvedOptions().timeZone}] ${message}${code}`;
   if (error) console.error(line);
   else console.log(line);
 }
@@ -184,7 +195,7 @@ function createBot({ client, rest, store, logger = log, now = Date.now,
       }
       nextRenameAt.set(channel.id, monotonicNow() + UPDATE_INTERVAL_MS);
       logger(`تم إنشاء قناة العد التنازلي ${channel.id} في السيرفر ${guild.id}.`);
-      await interaction.editReply(`✅ تم إنشاء قناة العد التنازلي للعبة GTA 6: <#${channel.id}>\n🔒 القناة مرئية للجميع ومغلقة للاتصال الافتراضي. يتم تحديثها كل خمس دقائق.`);
+      await interaction.editReply(`✅ تم إنشاء قناة العد التنازلي للعبة GTA 6: <#${channel.id}>\n🔒 القناة مرئية للجميع ومغلقة للاتصال الافتراضي. يتم تحديثها كل خمس دقائق.\n📅 موعد انتهاء العد: ${timestamp.format(new Date(RELEASE_AT))} (${timestamp.resolvedOptions().timeZone}).`);
     } finally {
       settingUp.delete(guild.id);
     }
@@ -266,6 +277,7 @@ function createBot({ client, rest, store, logger = log, now = Date.now,
 
 async function main() {
   require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
+  timestamp = createTimeFormatter(process.env.TIMEZONE);
   const token = process.env.DISCORD_TOKEN?.trim();
   if (!token || token === 'your_bot_token_here') {
     throw new Error('Set DISCORD_TOKEN in .env');
@@ -331,9 +343,9 @@ async function main() {
 
 if (require.main === module) {
   main().catch(error => {
-    log('فشل بدء التشغيل. تحقق من DISCORD_TOKEN وصلاحية gta_channel.json وإمكانية الكتابة في المجلد.', error);
+    log('فشل بدء التشغيل. تحقق من DISCORD_TOKEN وTIMEZONE وصلاحية gta_channel.json وإمكانية الكتابة في المجلد.', error);
     process.exitCode = 1;
   });
 }
 
-module.exports = { countdownName, validateMapping, ChannelStore, createBot, RELEASE_AT, UPDATE_INTERVAL_MS };
+module.exports = { countdownName, validateMapping, ChannelStore, createBot, createTimeFormatter, RELEASE_AT, UPDATE_INTERVAL_MS };
