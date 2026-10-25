@@ -8,7 +8,8 @@ const path = require('node:path');
 const { ChannelType, PermissionFlagsBits, Routes, InteractionContextType,
   ApplicationIntegrationType } = require('discord.js');
 const { countdownName, validateMapping, ChannelStore, createBot,
-  RELEASE_AT, UPDATE_INTERVAL_MS, createTimeFormatter } = require('../index');
+  RELEASE_AT, UPDATE_INTERVAL_MS, MIN_RENAME_INTERVAL_MS, DEFAULT_SETTINGS,
+  SettingsStore, validateSettings, createTimeFormatter } = require('../index');
 
 const GUILD = '111111111111111111';
 const CHANNEL = '222222222222222222';
@@ -26,6 +27,7 @@ test('time zone settings default to UTC, convert dates, and reject invalid zones
 
 function fixture(initial = { [GUILD]: CHANNEL }) {
   let mapping = { ...initial };
+  const savedSettings = {};
   let time = 0;
   const calls = { names: [], replies: [], deferred: [], create: [], commands: [], deletes: 0 };
   const channel = {
@@ -49,6 +51,12 @@ function fixture(initial = { [GUILD]: CHANNEL }) {
     remove: async (g, c) => { if (mapping[g] === c) delete mapping[g]; },
   };
   const rest = { post: async (route, body) => { calls.commands.push({ route, ...body }); } };
+  const settingsStore = {
+    read: async () => structuredClone(savedSettings),
+    patch: async (guildId, changes) => {
+      savedSettings[guildId] = { ...DEFAULT_SETTINGS, ...savedSettings[guildId], ...changes };
+    },
+  };
   const interaction = {
     commandName: 'setup_gta', guild,
     isChatInputCommand: () => true, inGuild: () => true,
@@ -56,9 +64,9 @@ function fixture(initial = { [GUILD]: CHANNEL }) {
     deferReply: async options => { calls.deferred.push(options); },
     editReply: async reply => { calls.replies.push(reply); },
   };
-  const bot = createBot({ client, rest, store, logger: () => {},
+  const bot = createBot({ client, rest, store, settingsStore, logger: () => {},
     now: () => RELEASE_AT - 90_000 + time, monotonicNow: () => time });
-  return { bot, calls, channel, guild, store, interaction,
+  return { bot, calls, channel, guild, store, settingsStore, interaction,
     advance: milliseconds => { time += milliseconds; } };
 }
 
@@ -68,7 +76,8 @@ test('countdown uses the fixed UTC target and handles release boundaries', () =>
   assert.equal(countdownName(RELEASE_AT - 1), '⏳ GTA 6: 0d 0h 0m');
   assert.equal(countdownName(RELEASE_AT), '🎉 GTA 6 نزلت!');
   assert.equal(countdownName(RELEASE_AT + 1), '🎉 GTA 6 نزلت!');
-  assert.equal(UPDATE_INTERVAL_MS, 300_000);
+  assert.equal(UPDATE_INTERVAL_MS, 60_000);
+  assert.equal(MIN_RENAME_INTERVAL_MS, 300_000);
 });
 
 test('mapping validation rejects malformed data and unsafe keys', () => {
@@ -173,7 +182,7 @@ test('updates skip unchanged names and enforce spacing between attempts', async 
   await f.bot.updateChannels();
   assert.equal(f.calls.names.length, 1);
   f.channel.name = 'externally changed';
-  f.advance(UPDATE_INTERVAL_MS - 1);
+  f.advance(MIN_RENAME_INTERVAL_MS - 1);
   await f.bot.updateChannels();
   assert.equal(f.calls.names.length, 1);
   f.advance(1);
@@ -239,4 +248,133 @@ test('ready registers the global administrator-only guild command', async t => {
   assert.deepEqual(registration.body.contexts, [InteractionContextType.Guild]);
   assert.deepEqual(registration.body.integration_types, [ApplicationIntegrationType.GuildInstall]);
   assert.equal(f.calls.names.length, 0); // No burst of renames on restart.
+  assert.equal(f.calls.commands.length, 2);
+  const settings = f.calls.commands[1].body;
+  assert.equal(settings.name, 'gta_settings');
+  assert.equal(settings.default_member_permissions, PermissionFlagsBits.Administrator.toString());
+  assert.equal(settings.options[0].min_value, 1);
+  assert.equal(settings.options[0].max_value, 1440);
+  assert.equal(settings.options[1].max_length, 100);
+});
+
+function settingsInteraction(f, interval = null, message = null) {
+  return { ...f.interaction, commandName: 'gta_settings', options: {
+    getInteger: () => interval, getString: () => message,
+  } };
+}
+
+test('settings command shows the one-minute default and persists independent options', async () => {
+  const f = fixture();
+  await f.bot.setup(settingsInteraction(f));
+  assert.match(f.calls.replies[0].content, /فترة الفحص: 1 دقيقة/);
+  assert.deepEqual(await f.settingsStore.read(), {});
+  await f.bot.setup(settingsInteraction(f, 10, '🙌 GTA 6 is here!'));
+  await f.bot.setup(settingsInteraction(f, 2));
+  assert.deepEqual((await f.settingsStore.read())[GUILD], {
+    updateMinutes: 2, releasedMessage: '🙌 GTA 6 is here!',
+  });
+  assert.equal((await f.settingsStore.read())[BOT], undefined);
+  assert.deepEqual(f.calls.replies.at(-1).allowedMentions, { parse: [] });
+  assert.equal(f.calls.create.length, 0);
+});
+
+test('settings rejects invalid intervals, blank/long messages, and unauthorized callers', async () => {
+  for (const [interval, message] of [[0, null], [1441, null], [1.5, null],
+    [null, '   '], [null, 'a'.repeat(101)], [null, 'two\nlines']]) {
+    const f = fixture();
+    await f.bot.setup(settingsInteraction(f, interval, message));
+    assert.match(f.calls.replies[0], /❌/);
+    assert.deepEqual(await f.settingsStore.read(), {});
+  }
+  for (const kind of ['non-admin', 'dm']) {
+    const f = fixture();
+    const interaction = settingsInteraction(f, 1, '🙌 Released!');
+    if (kind === 'dm') interaction.inGuild = () => false;
+    else interaction.memberPermissions = { has: () => false };
+    await f.bot.setup(interaction);
+    assert.deepEqual(await f.settingsStore.read(), {});
+    assert.match(f.calls.replies[0], /مسؤولي/);
+  }
+});
+
+test('custom release names apply after release and changes respect the rename safety window', async () => {
+  const f = fixture();
+  await f.bot.setup(settingsInteraction(f, 1, '🙌 Released!'));
+  f.advance(90_000);
+  await f.bot.updateChannels();
+  assert.deepEqual(f.calls.names, ['🙌 Released!']);
+  await f.bot.setup(settingsInteraction(f, null, '🎮 Play now!'));
+  f.advance(UPDATE_INTERVAL_MS);
+  await f.bot.updateChannels();
+  assert.equal(f.calls.names.length, 1);
+  f.advance(MIN_RENAME_INTERVAL_MS - UPDATE_INTERVAL_MS);
+  await f.bot.updateChannels();
+  assert.deepEqual(f.calls.names, ['🙌 Released!', '🎮 Play now!']);
+});
+
+test('per-guild intervals govern checks and shortening an interval schedules the next tick', async () => {
+  const f = fixture();
+  let fetches = 0;
+  f.guild.channels.fetch = async () => { fetches++; return f.channel; };
+  await f.bot.setup(settingsInteraction(f, 10));
+  await f.bot.updateChannels();
+  assert.equal(fetches, 1);
+  f.advance(6 * UPDATE_INTERVAL_MS);
+  await f.bot.updateChannels();
+  assert.equal(fetches, 1);
+  await f.bot.setup(settingsInteraction(f, 1));
+  await f.bot.updateChannels();
+  assert.equal(fetches, 2);
+});
+
+test('setup uses the configured released name when creating a channel after release', async () => {
+  const f = fixture({});
+  await f.bot.setup(settingsInteraction(f, 1, '🙌 Available!'));
+  f.advance(90_000);
+  await f.bot.setup(f.interaction);
+  assert.equal(f.calls.create[0].name, '🙌 Available!');
+});
+
+test('settings persistence survives restart and concurrent patches preserve other fields', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gta-settings-test-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, 'gta_settings.json');
+  const store = new SettingsStore(file);
+  await store.initialize();
+  await Promise.all([store.patch(GUILD, { updateMinutes: 3 }),
+    store.patch(GUILD, { releasedMessage: '🙌 Ready!' }), store.patch(BOT, { updateMinutes: 15 })]);
+  const restarted = new SettingsStore(file);
+  await restarted.initialize();
+  assert.deepEqual((await restarted.read())[GUILD], { updateMinutes: 3, releasedMessage: '🙌 Ready!' });
+  assert.equal((await restarted.read())[BOT].updateMinutes, 15);
+  await assert.rejects(store.patch(GUILD, { updateMinutes: 0 }));
+  assert.equal((await restarted.read())[GUILD].updateMinutes, 3);
+  await fs.writeFile(file, '{broken');
+  await assert.rejects(restarted.initialize());
+  assert.equal(await fs.readFile(file, 'utf8'), '{broken');
+  assert.throws(() => validateSettings({ [GUILD]: { ...DEFAULT_SETTINGS, extra: true } }));
+});
+
+test('restart cooldown prevents the one-minute poll or settings edits from renaming early', async t => {
+  const f = fixture();
+  t.after(() => f.bot.stop());
+  await f.bot.ready();
+  f.advance(UPDATE_INTERVAL_MS);
+  await f.bot.setup(settingsInteraction(f, 1, '🙌 Ready!'));
+  await f.bot.updateChannels();
+  assert.equal(f.calls.names.length, 0);
+  f.advance(MIN_RENAME_INTERVAL_MS - UPDATE_INTERVAL_MS);
+  await f.bot.updateChannels();
+  assert.deepEqual(f.calls.names, ['🙌 Ready!']);
+});
+
+test('failed settings writes do not report success or leave the guild locked', async () => {
+  const f = fixture();
+  const originalPatch = f.settingsStore.patch;
+  f.settingsStore.patch = async () => { throw new Error('Disk full'); };
+  await assert.rejects(f.bot.setup(settingsInteraction(f, 5)));
+  assert.equal(f.calls.replies.length, 0);
+  f.settingsStore.patch = originalPatch;
+  await f.bot.setup(settingsInteraction(f, 2));
+  assert.equal((await f.settingsStore.read())[GUILD].updateMinutes, 2);
 });

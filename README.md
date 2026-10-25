@@ -2,7 +2,7 @@
 
 ## العربية
 
-بوت Discord ينشئ قناة للعد التنازلي ويحدّث اسمها كل 5 دقائق.
+بوت Discord ينشئ قناة للعد التنازلي. فترة الفحص الافتراضية دقيقة واحدة، وتغيير الاسم محمي بفاصل 5 دقائق على الأقل.
 
 ### التشغيل
 
@@ -35,6 +35,19 @@ npm start
 
 6. نفّذ `/setup_gta` داخل السيرفر بحساب لديه صلاحية المسؤول.
 
+### إعدادات العد التنازلي
+
+للمسؤولين فقط، دون إعادة تشغيل البوت:
+
+```text
+/gta_settings interval_minutes: 1
+/gta_settings released_message: 🙌 GTA 6 نزلت!
+```
+
+الفترة من 1 إلى 1440 دقيقة، والرسالة من 1 إلى 100 حرف وتصبح اسم القناة عند انتهاء العد. يمكنك جمع الخيارين في أمر واحد. نفّذ `/gta_settings` دون خيارات لعرض الإعدادات.
+
+تُحفظ الإعدادات لكل سيرفر في `gta_settings.json` وتُطبق في دورة مؤهلة قادمة. الفحص كل دقيقة لا يعني تغيير الاسم كل دقيقة؛ توجد حماية بفاصل 5 دقائق على الأقل، وقد تؤخر الشبكة وقيود Discord التحديث أكثر. أول تغيير بعد إعادة التشغيل ينتظر 5 دقائق على الأقل.
+
 ### تغيير التوقيت
 
 غيّر `TIMEZONE` في `.env` ثم أعد تشغيل البوت، مثلاً:
@@ -47,7 +60,7 @@ TIMEZONE=Europe/London
 
 ### ملاحظات
 
-- شغّل نسخة واحدة فقط واحتفظ بملف `gta_channel.json` بين مرات التشغيل.
+- شغّل نسخة واحدة فقط واحتفظ بملفي `gta_channel.json` و`gta_settings.json` بين مرات التشغيل. لا ترفعهما إلى GitHub.
 - للاختبار: `npm test`.
 - أُنشئ بمساعدة الذكاء الاصطناعي باستخدام **OpenAI Codex — GPT-6.1**.
 
@@ -55,7 +68,7 @@ TIMEZONE=Europe/London
 
 ## English
 
-A Discord bot that creates a countdown channel and updates its name every 5 minutes.
+A Discord bot that creates a countdown channel. Checks default to once per minute; channel renames have a safety interval of at least 5 minutes.
 
 ### Setup
 
@@ -88,6 +101,19 @@ npm start
 
 6. Run `/setup_gta` in your server as an administrator.
 
+### Countdown settings
+
+Administrators can change settings without restarting:
+
+```text
+/gta_settings interval_minutes: 1
+/gta_settings released_message: 🙌 GTA 6 is here!
+```
+
+Choose 1–1440 minutes and a 1–100 character release message, used as the channel name when the countdown ends. Both options can be combined. Run `/gta_settings` without options to view settings.
+
+Settings persist per server in `gta_settings.json` and apply on the next eligible cycle. One-minute checks do not mean one-minute renames: a safety interval of at least 5 minutes applies. Network delays and Discord rate limits may add delays. After a restart, the first rename waits at least 5 minutes.
+
 ### Change time zone
 
 Change `TIMEZONE` in `.env`, then restart the bot. Example:
@@ -100,6 +126,6 @@ This changes displayed times only. The countdown ends on **18 November 2026 at 2
 
 ### Notes
 
-- Run one instance and keep `gta_channel.json` between restarts.
+- Run one instance and keep `gta_channel.json` and `gta_settings.json` between restarts. Do not upload them to GitHub.
 - Run tests: `npm test`.
 - Created with AI assistance using **OpenAI Codex — GPT-6.1**.
